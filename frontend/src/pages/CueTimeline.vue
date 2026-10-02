@@ -16,6 +16,7 @@ import {
 import ChannelChip from '@/components/common/ChannelChip.vue'
 import CueNoInput from '@/components/common/CueNoInput.vue'
 import FadeBar from '@/components/common/FadeBar.vue'
+import LiveNoticeBar from '@/components/common/LiveNoticeBar.vue'
 import { useCueOrder } from '@/hooks/useCueOrder'
 import { useCueStore, type CuePatch, type FadeShiftScope } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
@@ -338,6 +339,8 @@ function channelFilterDuplicate(fixtureId: string): boolean {
         <NButton type="primary" :disabled="!session" @click="openCreate">插入 Cue</NButton>
       </div>
     </header>
+
+    <LiveNoticeBar :session-id="sessionId" />
 
     <NAlert v-if="!session" type="warning" :bordered="false">
       该场次不存在，可能已被删除。请返回场次编排重新选择。

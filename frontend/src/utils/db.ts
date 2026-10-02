@@ -2,13 +2,14 @@ import Dexie, { type Table } from 'dexie'
 import type { Cue } from '@/types/cue'
 import type { Fixture } from '@/types/fixture'
 import type { CueLevel } from '@/types/level'
+import type { LiveLogEntry, LiveRun } from '@/types/live'
 import type { RehearsalSheet } from '@/types/sheet'
 import type { Session } from '@/types/session'
 
 /** IndexedDB 数据库名 */
 export const DB_NAME = 'gbcuesheet'
 /** 当前数据结构版本号，与 db.version() 对应 */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 /** 单键值元数据表，记录结构版本等本地状态 */
 export interface AppMetaRecord {
@@ -22,6 +23,8 @@ export interface AppMetaRecord {
  * - v1：场次 / 灯位通道 / Cue / 通道电平 / 排演表 五张表
  * - v2：场次补充 updatedAt 索引、排演表补充 sheetNo 索引与条目快照、新增 appMeta 元数据表，
  *       并对既有数据执行升级迁移（补齐字段、规范化遗留编号）
+ * - v3：新增现场运行单（liveRuns）与现场日志（liveLogs）两张表，
+ *       现场执行与 Cue 编排台分离，既有表结构不变
  */
 export class CueSheetDatabase extends Dexie {
   sessions!: Table<Session, string>
@@ -30,6 +33,8 @@ export class CueSheetDatabase extends Dexie {
   levels!: Table<CueLevel, string>
   sheets!: Table<RehearsalSheet, string>
   appMeta!: Table<AppMetaRecord, string>
+  liveRuns!: Table<LiveRun, string>
+  liveLogs!: Table<LiveLogEntry, string>
 
   constructor() {
     super(DB_NAME)
@@ -76,6 +81,17 @@ export class CueSheetDatabase extends Dexie {
             if (!Array.isArray(sheet.includedCueIds)) sheet.includedCueIds = []
           })
       })
+
+    this.version(3).stores({
+      sessions: 'id, order, createdAt, updatedAt',
+      fixtures: 'id, sessionId, channel, [sessionId+channel]',
+      cues: 'id, sessionId, cueNo, orderIndex, [sessionId+orderIndex]',
+      levels: 'id, cueId, fixtureId, [cueId+fixtureId]',
+      sheets: 'id, sessionId, sheetNo, generatedAt',
+      appMeta: 'key',
+      liveRuns: 'id, sessionId, status, startedAt',
+      liveLogs: 'id, runId, seq, actionId, [runId+seq]'
+    })
   }
 }
 
@@ -95,14 +111,20 @@ export async function writeMeta(key: string, value: string): Promise<void> {
 
 /** 清空全部本地数据（含结构版本回落重开） */
 export async function clearAllData(): Promise<void> {
-  await db.transaction('rw', [db.sessions, db.fixtures, db.cues, db.levels, db.sheets, db.appMeta], async () => {
-    await Promise.all([
-      db.sessions.clear(),
-      db.fixtures.clear(),
-      db.cues.clear(),
-      db.levels.clear(),
-      db.sheets.clear(),
-      db.appMeta.clear()
-    ])
-  })
+  await db.transaction(
+    'rw',
+    [db.sessions, db.fixtures, db.cues, db.levels, db.sheets, db.appMeta, db.liveRuns, db.liveLogs],
+    async () => {
+      await Promise.all([
+        db.sessions.clear(),
+        db.fixtures.clear(),
+        db.cues.clear(),
+        db.levels.clear(),
+        db.sheets.clear(),
+        db.appMeta.clear(),
+        db.liveRuns.clear(),
+        db.liveLogs.clear()
+      ])
+    }
+  )
 }

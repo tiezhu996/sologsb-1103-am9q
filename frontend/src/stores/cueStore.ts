@@ -5,6 +5,7 @@ import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
 import { orderIndexMap, compareCueNo, sortCues, suggestInsertIndex, suggestNextCueNo } from '@/utils/cueOrder'
 import { useLevelStore } from '@/stores/levelStore'
+import { useLiveStore } from '@/stores/liveStore'
 
 /** Cue 可更新字段 */
 export type CuePatch = Partial<Omit<Cue, 'id' | 'sessionId' | 'createdAt'>>
@@ -88,6 +89,7 @@ export const useCueStore = defineStore('cue', () => {
       ...cues.value.map((cue) => (shiftedIds.has(cue.id) ? { ...cue, orderIndex: cue.orderIndex + 1, updatedAt: now } : cue)),
       created
     ]
+    await useLiveStore().noteConsoleEdit(draft.sessionId, { kind: 'cue-add', cueId: created.id, cueNo: created.cueNo })
     return created
   }
 
@@ -100,8 +102,9 @@ export const useCueStore = defineStore('cue', () => {
     cues.value = cues.value.map((cue) => (cue.id === id ? next : cue))
 
     if (patch.cueNo && patch.cueNo !== target.cueNo) {
-      await sortByCueNo(target.sessionId)
+      await sortByCueNo(target.sessionId, true)
     }
+    await useLiveStore().noteConsoleEdit(target.sessionId, { kind: 'cue-update', cueId: id, cueNo: next.cueNo })
     return next
   }
 
@@ -115,6 +118,7 @@ export const useCueStore = defineStore('cue', () => {
     selectedCueIds.value = selectedCueIds.value.filter((cueId) => cueId !== id)
     await levelStore.removeByCue(id)
     await persistOrder(target.sessionId, sortedCuesOfSession(target.sessionId).map((cue) => cue.id))
+    await useLiveStore().noteConsoleEdit(target.sessionId, { kind: 'cue-remove', cueId: id, cueNo: target.cueNo })
   }
 
   /** 复制某条 Cue 的参数为新的一条（紧随其后） */
@@ -171,6 +175,10 @@ export const useCueStore = defineStore('cue', () => {
     await db.cues.bulkPut(shifted)
     const patched = new Map(shifted.map((cue) => [cue.id, cue]))
     cues.value = cues.value.map((cue) => patched.get(cue.id) ?? cue)
+    await useLiveStore().noteConsoleEdit(sessionId, {
+      kind: 'cue-update',
+      detail: `批量偏移过渡 ${deltaSec > 0 ? '+' : ''}${deltaSec}s（${shifted.length} 条）`
+    })
     return shifted.length
   }
 
@@ -194,12 +202,16 @@ export const useCueStore = defineStore('cue', () => {
   /** 拖拽重排：按传入 id 顺序落库 */
   async function reorderCues(sessionId: string, orderedIds: readonly string[]): Promise<void> {
     await persistOrder(sessionId, orderedIds)
+    await useLiveStore().noteConsoleEdit(sessionId, { kind: 'cue-reorder', detail: '拖拽调整 Cue 顺序' })
   }
 
-  /** 按 cueNo 自动排序并落库 */
-  async function sortByCueNo(sessionId: string): Promise<void> {
+  /** 按 cueNo 自动排序并落库；silent 用于改号等内部联动，不重复记现场标记 */
+  async function sortByCueNo(sessionId: string, silent = false): Promise<void> {
     const ordered = [...cuesOfSession(sessionId)].sort((a, b) => compareCueNo(a.cueNo, b.cueNo))
     await persistOrder(sessionId, ordered.map((cue) => cue.id))
+    if (!silent) {
+      await useLiveStore().noteConsoleEdit(sessionId, { kind: 'cue-reorder', detail: '按 Cue 号重排' })
+    }
   }
 
   /** 相对移动一位 */
@@ -214,6 +226,10 @@ export const useCueStore = defineStore('cue', () => {
     swapped[index] = ordered[nextIndex]
     swapped[nextIndex] = ordered[index]
     await persistOrder(target.sessionId, swapped)
+    await useLiveStore().noteConsoleEdit(target.sessionId, {
+      kind: 'cue-reorder',
+      detail: `${direction === -1 ? '上移' : '下移'} ${target.cueNo}`
+    })
   }
 
   async function removeBySession(sessionId: string): Promise<void> {

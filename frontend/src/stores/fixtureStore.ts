@@ -6,6 +6,7 @@ import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
 import { buildPatchCheck, emptyPatchCheck, groupFixturesByPosition, sortFixturesByChannel } from '@/utils/patch'
 import { useLevelStore } from '@/stores/levelStore'
+import { useLiveStore } from '@/stores/liveStore'
 
 /** Fixture 可更新字段 */
 export type FixturePatch = Partial<Omit<Fixture, 'id' | 'sessionId' | 'createdAt'>>
@@ -100,6 +101,11 @@ export const useFixtureStore = defineStore('fixture', () => {
     await db.fixtures.put(created)
     fixtures.value = [...fixtures.value, created]
     applyPatchCheck(draft.sessionId, buildPatchCheck(fixturesOfSession(draft.sessionId)))
+    await useLiveStore().noteConsoleEdit(draft.sessionId, {
+      kind: 'fixture-add',
+      fixtureId: created.id,
+      channel: created.channel
+    })
     return {
       ok: true,
       message: `已配接 CH${created.channel}`,
@@ -118,6 +124,11 @@ export const useFixtureStore = defineStore('fixture', () => {
     await db.fixtures.put(next)
     fixtures.value = fixtures.value.map((fixture) => (fixture.id === id ? next : fixture))
     applyPatchCheck(target.sessionId, buildPatchCheck(fixturesOfSession(target.sessionId)))
+    await useLiveStore().noteConsoleEdit(target.sessionId, {
+      kind: 'fixture-update',
+      fixtureId: id,
+      channel: next.channel
+    })
     return { ok: true, message: `已更新 CH${next.channel}`, fixture: next }
   }
 
@@ -129,6 +140,11 @@ export const useFixtureStore = defineStore('fixture', () => {
     fixtures.value = fixtures.value.filter((fixture) => fixture.id !== id)
     await levelStore.removeByFixture(id)
     applyPatchCheck(target.sessionId, buildPatchCheck(fixturesOfSession(target.sessionId)))
+    await useLiveStore().noteConsoleEdit(target.sessionId, {
+      kind: 'fixture-remove',
+      fixtureId: id,
+      channel: target.channel
+    })
   }
 
   async function removeBySession(sessionId: string): Promise<void> {

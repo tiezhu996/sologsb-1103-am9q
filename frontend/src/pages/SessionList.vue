@@ -147,6 +147,11 @@ function goCues(id: string): void {
   void router.push(`/sessions/${id}/cues`)
 }
 
+function goLive(id: string): void {
+  sessionStore.setCurrentSession(id)
+  void router.push(`/sessions/${id}/live`)
+}
+
 function focusSession(id: string): void {
   sessionStore.setCurrentSession(id)
 }
@@ -268,6 +273,7 @@ function focusSession(id: string): void {
         <div class="session-card__actions">
           <NButton size="small" @click.stop="goFixtures(session.id)">灯位通道</NButton>
           <NButton size="small" type="primary" ghost @click.stop="goCues(session.id)">Cue 编排</NButton>
+          <NButton size="small" type="warning" ghost @click.stop="goLive(session.id)">现场运行</NButton>
           <NButton size="small" quaternary :disabled="session.order === 1" @click.stop="moveSession(session.id, -1)">
             上移
           </NButton>

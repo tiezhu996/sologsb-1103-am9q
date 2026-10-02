@@ -6,6 +6,7 @@ import BlankHint from '@/components/common/BlankHint.vue'
 import ChannelChip from '@/components/common/ChannelChip.vue'
 import CueNoInput from '@/components/common/CueNoInput.vue'
 import FadeBar from '@/components/common/FadeBar.vue'
+import LiveNoticeBar from '@/components/common/LiveNoticeBar.vue'
 import { useCueStore } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
@@ -180,6 +181,8 @@ function goSheets(): void {
         <NButton @click="goSheets">排演表</NButton>
       </div>
     </header>
+
+    <LiveNoticeBar :session-id="sessionId" />
 
     <NAlert v-if="!cue" type="warning" :bordered="false">
       该 Cue 不存在，可能已被删除。请返回 Cue 编排时间轴重新选择。

@@ -16,6 +16,7 @@ import {
 } from 'naive-ui'
 import BlankHint from '@/components/common/BlankHint.vue'
 import ChannelChip from '@/components/common/ChannelChip.vue'
+import LiveNoticeBar from '@/components/common/LiveNoticeBar.vue'
 import { useChannelConflict } from '@/hooks/useChannelConflict'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
@@ -216,6 +217,8 @@ function positionColor(position: FixturePosition): string {
         <NButton type="primary" :disabled="!session" @click="openCreate()">新建灯位通道</NButton>
       </div>
     </header>
+
+    <LiveNoticeBar :session-id="sessionId" />
 
     <NAlert v-if="!session" type="warning" :bordered="false">
       该场次不存在，可能已被删除。请返回场次编排重新选择。

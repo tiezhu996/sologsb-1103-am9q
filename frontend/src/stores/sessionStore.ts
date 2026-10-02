@@ -7,6 +7,7 @@ import { sumCues } from '@/utils/fade'
 import { useCueStore } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useLiveStore } from '@/stores/liveStore'
 import { useSheetStore } from '@/stores/sheetStore'
 
 /** 场次统计：Cue 数量 / 过渡总时长 / 灯位通道数量 */
@@ -91,7 +92,7 @@ export const useSessionStore = defineStore('session', () => {
     return next
   }
 
-  /** 删除场次并级联清理灯位通道、Cue（含电平）与排演表 */
+  /** 删除场次并级联清理灯位通道、Cue（含电平）、排演表与现场运行记录 */
   async function removeSession(id: string): Promise<void> {
     const target = sessionById(id)
     if (!target) return
@@ -99,6 +100,7 @@ export const useSessionStore = defineStore('session', () => {
     const fixtureStore = useFixtureStore()
     const levelStore = useLevelStore()
     const sheetStore = useSheetStore()
+    const liveStore = useLiveStore()
 
     const cueIds = cueStore.cuesOfSession(id).map((cue) => cue.id)
     await db.sessions.delete(id)
@@ -107,6 +109,7 @@ export const useSessionStore = defineStore('session', () => {
     await cueStore.removeBySession(id)
     await fixtureStore.removeBySession(id)
     await sheetStore.removeBySession(id)
+    await liveStore.removeBySession(id)
     await renumber()
     if (currentSessionId.value === id) {
       currentSessionId.value = sortedSessions.value.length > 0 ? sortedSessions.value[0].id : null

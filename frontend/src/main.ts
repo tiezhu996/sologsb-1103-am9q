@@ -5,6 +5,7 @@ import router from '@/router'
 import { useCueStore } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useLiveStore } from '@/stores/liveStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSheetStore } from '@/stores/sheetStore'
 import '@/styles/global.css'
@@ -26,7 +27,8 @@ async function bootstrap(): Promise<void> {
       useFixtureStore(pinia).hydrate(),
       useCueStore(pinia).hydrate(),
       useLevelStore(pinia).hydrate(),
-      useSheetStore(pinia).hydrate()
+      useSheetStore(pinia).hydrate(),
+      useLiveStore(pinia).hydrate()
     ])
   } catch (error) {
     console.error('[gbcuesheet] 本地数据载入失败，将以空数据启动：', error)

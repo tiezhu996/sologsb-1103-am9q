@@ -4,6 +4,8 @@ import type { CueLevel } from '@/types/level'
 import { INTENSITY_MAX, INTENSITY_MIN } from '@/types/level'
 import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
+import { useCueStore } from '@/stores/cueStore'
+import { useLiveStore } from '@/stores/liveStore'
 
 /** 通道电平补丁 */
 export interface CueLevelPatch {
@@ -58,6 +60,13 @@ export const useLevelStore = defineStore('level', () => {
     hydrated.value = true
   }
 
+  /** 电平改动经 Cue 反查场次，有进行中现场时记一条待生效标记 */
+  async function notifyLiveEdit(cueId: string, fixtureId: string, kind: 'level-upsert' | 'level-remove'): Promise<void> {
+    const sessionId = useCueStore().cueById(cueId)?.sessionId
+    if (!sessionId) return
+    await useLiveStore().noteConsoleEdit(sessionId, { kind, cueId, fixtureId })
+  }
+
   async function upsertLevel(cueId: string, fixtureId: string, patch: CueLevelPatch): Promise<CueLevel> {
     const existing = levelOf(cueId, fixtureId)
     const now = Date.now()
@@ -71,6 +80,7 @@ export const useLevelStore = defineStore('level', () => {
       }
       await db.levels.put(next)
       levels.value = levels.value.map((level) => (level.id === next.id ? next : level))
+      await notifyLiveEdit(cueId, fixtureId, 'level-upsert')
       return next
     }
     const created: CueLevel = {
@@ -84,6 +94,7 @@ export const useLevelStore = defineStore('level', () => {
     }
     await db.levels.put(created)
     levels.value = [...levels.value, created]
+    await notifyLiveEdit(cueId, fixtureId, 'level-upsert')
     return created
   }
 
@@ -92,6 +103,7 @@ export const useLevelStore = defineStore('level', () => {
     if (!target) return
     await db.levels.delete(target.id)
     levels.value = levels.value.filter((level) => level.id !== target.id)
+    await notifyLiveEdit(cueId, fixtureId, 'level-remove')
   }
 
   async function removeByCue(cueId: string): Promise<void> {
