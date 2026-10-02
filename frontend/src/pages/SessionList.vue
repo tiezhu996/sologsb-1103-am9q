@@ -19,6 +19,7 @@ import BlankHint from '@/components/common/BlankHint.vue'
 import FadeBar from '@/components/common/FadeBar.vue'
 import { useCueOrder } from '@/hooks/useCueOrder'
 import { useCueStore } from '@/stores/cueStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import type { CueOrderSummary } from '@/types/cue'
 import { createEmptySessionDraft, type Session, type SessionDraft, type SessionStat } from '@/types/session'
@@ -29,6 +30,7 @@ const message = useMessage()
 const dialog = useDialog()
 const sessionStore = useSessionStore()
 const cueStore = useCueStore()
+const runStore = useRunStore()
 
 const currentSessionId = computed(() => sessionStore.currentSessionId ?? '')
 const { summary: currentSummary, hardCutCount } = useCueOrder(currentSessionId)
@@ -147,6 +149,20 @@ function goCues(id: string): void {
   void router.push(`/sessions/${id}/cues`)
 }
 
+function goRun(id: string): void {
+  sessionStore.setCurrentSession(id)
+  void router.push(`/sessions/${id}/run`)
+}
+
+/** 卡片上的现场状态徽标 */
+function runBadge(id: string): { text: string; type: 'success' | 'warning' | 'default' } | null {
+  const run = runStore.runOfSession(id)
+  if (!run) return null
+  if (run.status === 'live') return { text: '现场进行中', type: 'success' }
+  if (run.appliedAt) return { text: '已带入下一场', type: 'default' }
+  return { text: '现场已结束 · 待确认', type: 'warning' }
+}
+
 function focusSession(id: string): void {
   sessionStore.setCurrentSession(id)
 }
@@ -237,6 +253,14 @@ function focusSession(id: string): void {
           <NTag v-if="session.id === sessionStore.currentSessionId" size="small" type="warning" :bordered="false">
             当前场次
           </NTag>
+          <NTag
+            v-if="runBadge(session.id)"
+            size="small"
+            :type="runBadge(session.id)?.type"
+            :bordered="false"
+          >
+            {{ runBadge(session.id)?.text }}
+          </NTag>
         </div>
 
         <p class="session-card__note">{{ session.stageNote || '未填写舞台状态说明' }}</p>
@@ -268,6 +292,13 @@ function focusSession(id: string): void {
         <div class="session-card__actions">
           <NButton size="small" @click.stop="goFixtures(session.id)">灯位通道</NButton>
           <NButton size="small" type="primary" ghost @click.stop="goCues(session.id)">Cue 编排</NButton>
+          <NButton
+            size="small"
+            :type="runStore.runOfSession(session.id)?.status === 'live' ? 'primary' : 'default'"
+            @click.stop="goRun(session.id)"
+          >
+            现场运行单
+          </NButton>
           <NButton size="small" quaternary :disabled="session.order === 1" @click.stop="moveSession(session.id, -1)">
             上移
           </NButton>

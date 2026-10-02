@@ -6,6 +6,7 @@ import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
 import { buildPatchCheck, emptyPatchCheck, groupFixturesByPosition, sortFixturesByChannel } from '@/utils/patch'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 
 /** Fixture 可更新字段 */
 export type FixturePatch = Partial<Omit<Fixture, 'id' | 'sessionId' | 'createdAt'>>
@@ -82,6 +83,11 @@ export const useFixtureStore = defineStore('fixture', () => {
     hydrated.value = true
   }
 
+  /** 灯位通道改动标记为下一场待生效（现场未开演时为空操作） */
+  async function markPending(sessionId: string, fixtureId: string): Promise<void> {
+    await useRunStore().markFixturePending(sessionId, fixtureId)
+  }
+
   async function addFixture(draft: FixtureDraft): Promise<FixtureWriteResult> {
     const channelError = validateChannel(draft.channel)
     if (channelError) return { ok: false, message: channelError, fixture: null }
@@ -100,6 +106,7 @@ export const useFixtureStore = defineStore('fixture', () => {
     await db.fixtures.put(created)
     fixtures.value = [...fixtures.value, created]
     applyPatchCheck(draft.sessionId, buildPatchCheck(fixturesOfSession(draft.sessionId)))
+    await markPending(draft.sessionId, created.id)
     return {
       ok: true,
       message: `已配接 CH${created.channel}`,
@@ -118,6 +125,7 @@ export const useFixtureStore = defineStore('fixture', () => {
     await db.fixtures.put(next)
     fixtures.value = fixtures.value.map((fixture) => (fixture.id === id ? next : fixture))
     applyPatchCheck(target.sessionId, buildPatchCheck(fixturesOfSession(target.sessionId)))
+    await markPending(target.sessionId, id)
     return { ok: true, message: `已更新 CH${next.channel}`, fixture: next }
   }
 
@@ -129,6 +137,7 @@ export const useFixtureStore = defineStore('fixture', () => {
     fixtures.value = fixtures.value.filter((fixture) => fixture.id !== id)
     await levelStore.removeByFixture(id)
     applyPatchCheck(target.sessionId, buildPatchCheck(fixturesOfSession(target.sessionId)))
+    await markPending(target.sessionId, id)
   }
 
   async function removeBySession(sessionId: string): Promise<void> {

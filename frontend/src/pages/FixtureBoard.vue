@@ -19,6 +19,7 @@ import ChannelChip from '@/components/common/ChannelChip.vue'
 import { useChannelConflict } from '@/hooks/useChannelConflict'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
   DMX_CHANNEL_MAX,
@@ -39,9 +40,19 @@ const dialog = useDialog()
 const sessionStore = useSessionStore()
 const fixtureStore = useFixtureStore()
 const levelStore = useLevelStore()
+const runStore = useRunStore()
 
 const sessionId = computed(() => String(route.params.id ?? ''))
 const session = computed(() => sessionStore.sessionById(sessionId.value))
+
+/** 现场进行中：通道改动只标下一场待生效，运行单电平保持不变 */
+const liveRun = computed(() => runStore.runOfSession(sessionId.value))
+const isLive = computed(() => liveRun.value?.status === 'live')
+const pendingFixtureCount = computed(() => liveRun.value?.pendingFixtureIds.length ?? 0)
+
+function isFixturePending(fixtureId: string): boolean {
+  return runStore.isFixturePending(sessionId.value, fixtureId)
+}
 
 const { messages, conflictChannels, conflictFixtureIds, loads, hasConflict, hasOverload } = useChannelConflict(sessionId)
 
@@ -177,6 +188,10 @@ function goCues(): void {
   void router.push(`/sessions/${sessionId.value}/cues`)
 }
 
+function goRun(): void {
+  void router.push(`/sessions/${sessionId.value}/run`)
+}
+
 function goSessions(): void {
   void router.push('/sessions')
 }
@@ -213,12 +228,20 @@ function positionColor(position: FixturePosition): string {
       <div class="page__actions">
         <NButton @click="goSessions">返回场次</NButton>
         <NButton @click="goCues">Cue 时间轴</NButton>
+        <NButton :type="isLive ? 'primary' : 'default'" @click="goRun">
+          {{ isLive ? '现场运行中 · 查看运行单' : '现场运行单' }}
+        </NButton>
         <NButton type="primary" :disabled="!session" @click="openCreate()">新建灯位通道</NButton>
       </div>
     </header>
 
     <NAlert v-if="!session" type="warning" :bordered="false">
       该场次不存在，可能已被删除。请返回场次编排重新选择。
+    </NAlert>
+
+    <NAlert v-else-if="isLive" type="info" :bordered="false">
+      现场进行中：删除通道或修改通道号不会影响正在输出的现场状态，只会标记为下一场待生效（当前
+      {{ pendingFixtureCount }} 个通道待生效），并在运行单当前提示列出冲突。
     </NAlert>
 
     <template v-else>
@@ -300,6 +323,7 @@ function positionColor(position: FixturePosition): string {
               />
               <span class="fixture-row__type">{{ fixture.fixtureType }}</span>
               <span class="fixture-row__note">{{ fixture.patchNote || '无配接备注' }}</span>
+              <NTag v-if="isFixturePending(fixture.id)" size="tiny" type="warning" :bordered="false">下一场待生效</NTag>
               <span class="toolbar__spacer" />
               <NButton size="tiny" quaternary @click="openEdit(fixture)">编辑</NButton>
               <NButton size="tiny" quaternary type="error" @click="confirmRemove(fixture)">删除</NButton>
@@ -317,6 +341,7 @@ function positionColor(position: FixturePosition): string {
             <span>灯具</span>
             <span>色纸</span>
             <span>配接备注</span>
+            <span>待生效</span>
             <span>操作</span>
           </div>
           <div
@@ -337,6 +362,9 @@ function positionColor(position: FixturePosition): string {
             <span>{{ fixture.fixtureType }}</span>
             <span class="mono">{{ fixture.gel || '—' }}</span>
             <span class="channel-table__note">{{ fixture.patchNote || '—' }}</span>
+            <span class="channel-table__pending">
+              <NTag v-if="isFixturePending(fixture.id)" size="tiny" type="warning" :bordered="false">待生效</NTag>
+            </span>
             <span class="channel-table__actions">
               <NButton size="tiny" quaternary @click="openEdit(fixture)">编辑</NButton>
               <NButton size="tiny" quaternary type="error" @click="confirmRemove(fixture)">删除</NButton>

@@ -4,6 +4,7 @@ import type { CueLevel } from '@/types/level'
 import { INTENSITY_MAX, INTENSITY_MIN } from '@/types/level'
 import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
+import { useRunStore } from '@/stores/runStore'
 
 /** 通道电平补丁 */
 export interface CueLevelPatch {
@@ -58,6 +59,11 @@ export const useLevelStore = defineStore('level', () => {
     hydrated.value = true
   }
 
+  /** 电平改动标记为该 Cue 下一场待生效（现场未开演时为空操作） */
+  async function markChanged(cueId: string): Promise<void> {
+    await useRunStore().markCueChanged(cueId)
+  }
+
   async function upsertLevel(cueId: string, fixtureId: string, patch: CueLevelPatch): Promise<CueLevel> {
     const existing = levelOf(cueId, fixtureId)
     const now = Date.now()
@@ -71,6 +77,7 @@ export const useLevelStore = defineStore('level', () => {
       }
       await db.levels.put(next)
       levels.value = levels.value.map((level) => (level.id === next.id ? next : level))
+      await markChanged(cueId)
       return next
     }
     const created: CueLevel = {
@@ -84,6 +91,7 @@ export const useLevelStore = defineStore('level', () => {
     }
     await db.levels.put(created)
     levels.value = [...levels.value, created]
+    await markChanged(cueId)
     return created
   }
 
@@ -92,6 +100,7 @@ export const useLevelStore = defineStore('level', () => {
     if (!target) return
     await db.levels.delete(target.id)
     levels.value = levels.value.filter((level) => level.id !== target.id)
+    await markChanged(cueId)
   }
 
   async function removeByCue(cueId: string): Promise<void> {

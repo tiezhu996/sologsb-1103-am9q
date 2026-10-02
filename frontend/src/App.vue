@@ -13,11 +13,13 @@ import {
   type MenuOption
 } from 'naive-ui'
 import { useCueStore } from '@/stores/cueStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSessionStore } from '@/stores/sessionStore'
 
 const route = useRoute()
 const sessionStore = useSessionStore()
 const cueStore = useCueStore()
+const runStore = useRunStore()
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -44,6 +46,7 @@ const themeOverrides: GlobalThemeOverrides = {
 const menuOptions = computed<MenuOption[]>(() => {
   const sessionId = sessionStore.currentSessionId
   const sessionTitle = sessionStore.currentSession ? sessionStore.currentSession.title : '未选择场次'
+  const liveRunning = Boolean(sessionId && runStore.liveRunOfSession(sessionId))
   return [
     {
       label: () => h(RouterLink, { to: '/sessions' }, { default: () => '场次编排' }),
@@ -63,6 +66,22 @@ const menuOptions = computed<MenuOption[]>(() => {
       label: () =>
         h(RouterLink, { to: sessionId ? `/sessions/${sessionId}/cues` : '/sessions' }, { default: () => 'Cue 编排时间轴' }),
       key: 'cues',
+      disabled: !sessionId
+    },
+    {
+      label: () =>
+        h(
+          RouterLink,
+          { to: sessionId ? `/sessions/${sessionId}/run` : '/sessions' },
+          {
+            default: () =>
+              h('span', { class: 'menu-run' }, [
+                h('span', null, '现场运行单'),
+                liveRunning ? h('span', { class: 'menu-run__live' }, '● 进行中') : null
+              ])
+          }
+        ),
+      key: 'run',
       disabled: !sessionId
     },
     {
@@ -87,6 +106,7 @@ const menuOptions = computed<MenuOption[]>(() => {
 const activeKey = computed(() => {
   const path = route.path
   if (path.startsWith('/sheets')) return 'sheets'
+  if (path.includes('/run')) return 'run'
   if (path.includes('/fixtures')) return 'fixtures'
   if (path.includes('/cues') || path.includes('/levels')) return 'cues'
   return 'sessions'
@@ -240,6 +260,18 @@ const currentSessionLabel = computed(() => {
 
 :deep(.app-sider__current) {
   color: rgba(242, 181, 68, 0.85);
+}
+
+.menu-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-run__live {
+  font-size: 11px;
+  color: #3fbf9f;
+  letter-spacing: 0.5px;
 }
 
 .page-fade-enter-active,

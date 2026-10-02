@@ -41,6 +41,7 @@ docker compose up -d --build    # 改动代码后重新构建
 | `/sessions` | 场次编排 | 新建场次、上下调序、查看每场 Cue 数与过渡总时长、硬切衔接预警 | Session、Cue |
 | `/sessions/:id/fixtures` | 灯位通道配置台 | 通道号排布、按灯位分组折叠、重复通道号高亮、灯位负载校验 | Fixture、Session |
 | `/sessions/:id/cues` | Cue 编排时间轴 | 插入 / 复制 / 删除 Cue、拖拽调整先后、沿袭上一条参数、批量偏移过渡时间 | Cue、CueLevel |
+| `/sessions/:id/run` | 现场运行单 | 开演固定顺序与电平、GO / 跳演 / 回退（只记现场日志）、写入检查点恢复、冲突列出、待生效带入下一场 | LiveRun（Cue / Fixture 只读快照） |
 | `/cues/:id/levels` | 通道电平编辑 | 逐通道设定亮度与色温、色温漂移检查、一键对齐基准色温 | CueLevel、Fixture |
 | `/sheets` | 排演表生成与导出 | 勾选 Cue 组表、本地留存历史、预览 / 复制 / 下载纯文本 | RehearsalSheet、Cue |
 
@@ -104,8 +105,9 @@ sologsb-1103/
 ## 六、数据存储说明
 
 - 所有数据存放在**浏览器本地 IndexedDB**，数据库名 `gbcuesheet`，由 `src/utils/db.ts` 用 Dexie 统一封装；页面不直接读写数据库，只调用 store 的 action。
-- 共 6 张表：`sessions`、`fixtures`、`cues`、`levels`、`sheets`、`appMeta`（元数据）。
-- **数据结构版本号**：`DB_VERSION = 2`。`version(1)` 定义初始结构；`version(2)` 新增 `updatedAt` / `sheetNo` 索引、`appMeta` 表，并在 `upgrade()` 中迁移既有数据（补齐 `updatedAt`、`orderIndex`、`holdSec`，规范化遗留排演表编号与条目快照）。
+- 共 7 张表：`sessions`、`fixtures`、`cues`、`levels`、`sheets`、`runs`（现场运行）、`appMeta`（元数据）。
+- **数据结构版本号**：`DB_VERSION = 3`。`version(1)` 定义初始结构；`version(2)` 新增 `updatedAt` / `sheetNo` 索引、`appMeta` 表，并在 `upgrade()` 中迁移既有数据（补齐 `updatedAt`、`orderIndex`、`holdSec`，规范化遗留排演表编号与条目快照）；`version(3)` 新增 `runs` 表。
+- **运行单与编排台分离**：开演时把本次 Cue 顺序、过渡参数与全部通道电平冻结进 `LiveRun.cueSnapshots`；运行中的 GO / 跳演 / 回退只向 `logs` 追加现场日志，每次确认动作整体落库为日志检查点，写入失败即回滚到上一检查点（幂等令牌 + 在途动作合并保证重复 GO 只记一条）。编排台在现场期间的改动照常落到 Cue / Fixture / Level，但只通过 `pendingCueIds` / `pendingFixtureIds` 标记为下一场待生效；当前提示被删或通道失效时现场保留快照状态并列出冲突。结束现场后确认一次把待生效改动带入下一场（改动本已在编排数据中，确认只清标记），旧排演表快照不参与、不变动。
 - 删除场次会级联清理其灯位通道、Cue、通道电平与排演表；删除通道会清理对应的电平记录。
 - **容器无状态**：不使用数据库服务、不挂载命名卷；换浏览器或清理站点数据即等于清空。排演表以生成时刻的快照留档，之后修改 Cue 不影响历史记录。
 

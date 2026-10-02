@@ -10,6 +10,7 @@ import {
   NInputNumber,
   NModal,
   NSelect,
+  NTag,
   useDialog,
   useMessage
 } from 'naive-ui'
@@ -20,6 +21,7 @@ import { useCueOrder } from '@/hooks/useCueOrder'
 import { useCueStore, type CuePatch, type FadeShiftScope } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { CUE_TRIGGERS, type Cue, type CueTrigger } from '@/types/cue'
 import type { FixturePosition } from '@/types/fixture'
@@ -34,9 +36,19 @@ const sessionStore = useSessionStore()
 const cueStore = useCueStore()
 const fixtureStore = useFixtureStore()
 const levelStore = useLevelStore()
+const runStore = useRunStore()
 
 const sessionId = computed(() => String(route.params.id ?? ''))
 const session = computed(() => sessionStore.sessionById(sessionId.value))
+
+/** 本场现场状态：进行中时编排台改动只标为下一场待生效，不触碰运行单 */
+const liveRun = computed(() => runStore.runOfSession(sessionId.value))
+const isLive = computed(() => liveRun.value?.status === 'live')
+const pendingCueCount = computed(() => liveRun.value?.pendingCueIds.length ?? 0)
+
+function isPending(cueId: string): boolean {
+  return runStore.isCuePending(sessionId.value, cueId)
+}
 
 const { cues, summary, nextCueNo, hardCutCount, reorder } = useCueOrder(sessionId)
 
@@ -301,6 +313,10 @@ function goFixtures(): void {
   void router.push(`/sessions/${sessionId.value}/fixtures`)
 }
 
+function goRun(): void {
+  void router.push(`/sessions/${sessionId.value}/run`)
+}
+
 function goSheets(): void {
   void router.push('/sheets')
 }
@@ -332,6 +348,9 @@ function channelFilterDuplicate(fixtureId: string): boolean {
       </div>
       <div class="page__actions">
         <NButton @click="goFixtures">灯位通道</NButton>
+        <NButton :type="isLive ? 'primary' : 'default'" @click="goRun">
+          {{ isLive ? '现场运行中 · 查看运行单' : '现场运行单' }}
+        </NButton>
         <NButton @click="goSheets">排演表</NButton>
         <NButton @click="showShift = true">批量偏移过渡</NButton>
         <NButton @click="sortByCueNo">按 Cue 号重排</NButton>
@@ -341,6 +360,15 @@ function channelFilterDuplicate(fixtureId: string): boolean {
 
     <NAlert v-if="!session" type="warning" :bordered="false">
       该场次不存在，可能已被删除。请返回场次编排重新选择。
+    </NAlert>
+
+    <NAlert v-else-if="isLive" type="info" :bordered="false">
+      现场进行中：此处的任何修改都不会影响正在执行的运行单，只标记为下一场待生效（当前 {{ pendingCueCount }} 条
+      Cue 待生效）；当前提示被删或通道失效时，现场保持开演状态并在运行单列出冲突。
+    </NAlert>
+
+    <NAlert v-else-if="liveRun && liveRun.status === 'ended'" type="warning" :bordered="false">
+      上一场现场已结束。此处改动即为下一场编排；请到现场运行单确认把 {{ pendingCueCount }} 条待生效改动一次带入下一场。
     </NAlert>
 
     <template v-else>
@@ -427,6 +455,7 @@ function channelFilterDuplicate(fixtureId: string): boolean {
                 :existing-nos="existingNosOf(cue)"
                 @commit="(value) => commitCueNo(cue, value)"
               />
+              <NTag v-if="isPending(cue.id)" size="small" type="warning" :bordered="false">下一场待生效</NTag>
               <NInput
                 :value="labelValue(cue)"
                 size="small"

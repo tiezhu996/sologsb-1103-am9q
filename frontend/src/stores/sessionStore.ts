@@ -7,6 +7,7 @@ import { sumCues } from '@/utils/fade'
 import { useCueStore } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSheetStore } from '@/stores/sheetStore'
 
 /** 场次统计：Cue 数量 / 过渡总时长 / 灯位通道数量 */
@@ -99,6 +100,7 @@ export const useSessionStore = defineStore('session', () => {
     const fixtureStore = useFixtureStore()
     const levelStore = useLevelStore()
     const sheetStore = useSheetStore()
+    const runStore = useRunStore()
 
     const cueIds = cueStore.cuesOfSession(id).map((cue) => cue.id)
     await db.sessions.delete(id)
@@ -107,6 +109,7 @@ export const useSessionStore = defineStore('session', () => {
     await cueStore.removeBySession(id)
     await fixtureStore.removeBySession(id)
     await sheetStore.removeBySession(id)
+    await runStore.removeBySession(id)
     await renumber()
     if (currentSessionId.value === id) {
       currentSessionId.value = sortedSessions.value.length > 0 ? sortedSessions.value[0].id : null

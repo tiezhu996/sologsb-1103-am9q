@@ -9,6 +9,7 @@ import FadeBar from '@/components/common/FadeBar.vue'
 import { useCueStore } from '@/stores/cueStore'
 import { useFixtureStore } from '@/stores/fixtureStore'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import type { Fixture, FixturePosition } from '@/types/fixture'
 import { COLOR_TEMP_MAX, COLOR_TEMP_MIN, COLOR_TEMP_STEP } from '@/types/level'
@@ -22,11 +23,15 @@ const cueStore = useCueStore()
 const fixtureStore = useFixtureStore()
 const levelStore = useLevelStore()
 const sessionStore = useSessionStore()
+const runStore = useRunStore()
 
 const cueId = computed(() => String(route.params.id ?? ''))
 const cue = computed(() => cueStore.cueById(cueId.value))
 const sessionId = computed(() => cue.value?.sessionId ?? '')
 const session = computed(() => (sessionId.value ? sessionStore.sessionById(sessionId.value) : null))
+
+/** 现场进行中：本页改动只标下一场待生效，运行单电平保持开演快照 */
+const isLive = computed(() => (sessionId.value ? runStore.liveRunOfSession(sessionId.value) !== null : false))
 
 const fixtures = computed(() => (sessionId.value ? fixtureStore.sortedFixturesOfSession(sessionId.value) : []))
 const levels = computed(() => levelStore.levelsOfCue(cueId.value))
@@ -185,7 +190,11 @@ function goSheets(): void {
       该 Cue 不存在，可能已被删除。请返回 Cue 编排时间轴重新选择。
     </NAlert>
 
-    <template v-else>
+    <NAlert v-else-if="isLive" type="info" :bordered="false">
+      现场进行中：这里调整的亮度与色温不会影响正在执行的运行单，只标记为下一场待生效；现场继续按开演快照输出。
+    </NAlert>
+
+    <template v-else-if="cue">
       <section class="panel">
         <div class="cue-head">
           <CueNoInput :model-value="cue.cueNo" :existing-nos="siblingNos" width="130px" @commit="commitCueNo" />

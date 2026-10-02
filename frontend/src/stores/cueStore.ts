@@ -5,6 +5,7 @@ import { db } from '@/utils/db'
 import { createId } from '@/utils/id'
 import { orderIndexMap, compareCueNo, sortCues, suggestInsertIndex, suggestNextCueNo } from '@/utils/cueOrder'
 import { useLevelStore } from '@/stores/levelStore'
+import { useRunStore } from '@/stores/runStore'
 
 /** Cue 可更新字段 */
 export type CuePatch = Partial<Omit<Cue, 'id' | 'sessionId' | 'createdAt'>>
@@ -14,12 +15,18 @@ export type FadeShiftScope = 'in' | 'out' | 'both'
 
 /**
  * Cue 提示点仓库：维护 Cue 时间轴顺序（orderIndex 落库）与排演表勾选导出集合。
+ * 现场进行中的改动不触碰运行单，只通过 runStore 标记为下一场待生效。
  */
 export const useCueStore = defineStore('cue', () => {
   const cues = ref<Cue[]>([])
   /** 排演表勾选集合，跨页共享 */
   const selectedCueIds = ref<string[]>([])
   const hydrated = ref(false)
+
+  /** 把一批 Cue 标记为下一场待生效（现场未开演时为空操作） */
+  async function markPending(sessionId: string, cueIds: Iterable<string>): Promise<void> {
+    await useRunStore().markCuesPending(sessionId, cueIds)
+  }
 
   const cuesBySession = computed<Record<string, Cue[]>>(() => {
     const grouped: Record<string, Cue[]> = {}
@@ -88,6 +95,7 @@ export const useCueStore = defineStore('cue', () => {
       ...cues.value.map((cue) => (shiftedIds.has(cue.id) ? { ...cue, orderIndex: cue.orderIndex + 1, updatedAt: now } : cue)),
       created
     ]
+    await markPending(draft.sessionId, [created.id, ...shifting.map((cue) => cue.id)])
     return created
   }
 
@@ -98,6 +106,7 @@ export const useCueStore = defineStore('cue', () => {
     const next: Cue = { ...target, ...patch, updatedAt: Date.now() }
     await db.cues.put(next)
     cues.value = cues.value.map((cue) => (cue.id === id ? next : cue))
+    await markPending(target.sessionId, [id])
 
     if (patch.cueNo && patch.cueNo !== target.cueNo) {
       await sortByCueNo(target.sessionId)
@@ -113,6 +122,7 @@ export const useCueStore = defineStore('cue', () => {
     await db.cues.delete(id)
     cues.value = cues.value.filter((cue) => cue.id !== id)
     selectedCueIds.value = selectedCueIds.value.filter((cueId) => cueId !== id)
+    await markPending(target.sessionId, [id])
     await levelStore.removeByCue(id)
     await persistOrder(target.sessionId, sortedCuesOfSession(target.sessionId).map((cue) => cue.id))
   }
@@ -171,6 +181,7 @@ export const useCueStore = defineStore('cue', () => {
     await db.cues.bulkPut(shifted)
     const patched = new Map(shifted.map((cue) => [cue.id, cue]))
     cues.value = cues.value.map((cue) => patched.get(cue.id) ?? cue)
+    await markPending(sessionId, shifted.map((cue) => cue.id))
     return shifted.length
   }
 
@@ -189,6 +200,10 @@ export const useCueStore = defineStore('cue', () => {
     await db.cues.bulkPut(changed)
     const patched = new Map(changed.map((cue) => [cue.id, cue]))
     cues.value = cues.value.map((cue) => patched.get(cue.id) ?? cue)
+    await markPending(
+      sessionId,
+      changed.map((cue) => cue.id)
+    )
   }
 
   /** 拖拽重排：按传入 id 顺序落库 */
